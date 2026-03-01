@@ -1,0 +1,66 @@
+# Feishu/Lark Docker Compose configuration
+#
+# The Feishu extension reads most settings from ~/.openclaw/openclaw.json
+# (appId, appSecret, domain, connectionMode, encryptKey, verificationToken, etc.).
+# Only FEISHU_APP_ID and FEISHU_APP_SECRET are used as env-var fallbacks during
+# onboarding; all other channel config belongs in the config file.
+#
+# Webhook mode: set connectionMode="webhook" in openclaw.json and expose port 3000.
+# WebSocket mode: no extra ports needed (Feishu China apps only; Lark intl requires webhook).
+
+services:
+  openclaw-lark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      # Feishu/Lark credentials (onboarding fallback; prefer openclaw.json)
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+      # Model provider API keys
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-./config}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-./workspace}:/home/node/.openclaw/workspace
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      # Webhook receiver (only needed when connectionMode="webhook" in openclaw.json)
+      - "${FEISHU_WEBHOOK_PORT:-3000}:3000"
+    init: true
+    restart: unless-stopped
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      [
+        "node",
+        "dist/index.js",
+        "gateway",
+        "--bind",
+        "${OPENCLAW_GATEWAY_BIND:-lan}",
+        "--port",
+        "18789",
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - openclaw-lark-net
+
+networks:
+  openclaw-lark-net:
+    driver: bridge
